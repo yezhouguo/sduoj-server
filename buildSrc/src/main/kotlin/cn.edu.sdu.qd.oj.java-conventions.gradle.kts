@@ -85,6 +85,24 @@ allprojects {
             enabled = true
         }
         publishing {
+            val GITHUB_ACTOR = System.getenv("GITHUB_ACTOR")
+            val GITHUB_TOKEN = System.getenv("GITHUB_TOKEN")
+            val REPO = System.getenv("GITHUB_REPOSITORY")
+            println(GITHUB_ACTOR)
+            println(REPO)
+            GITHUB_ACTOR?.run {
+                println("runn")
+                repositories {
+                    maven {
+                        name = "GitHubPackages"
+                        url = uri("https://maven.pkg.github.com/${REPO}")
+                        credentials {
+                            username = GITHUB_ACTOR
+                            password = GITHUB_TOKEN
+                        }
+                    }
+                }
+            }
             publications.create<MavenPublication>("maven") {
                 artifact(tasks.jar)
             }

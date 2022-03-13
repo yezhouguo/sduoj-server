@@ -1,0 +1,26 @@
+name: Compilation
+
+on:
+  push:
+    branches: 
+      - zhangt2333/test
+  workflow_dispatch: # add manually button
+
+jobs:
+  build:
+    runs-on: ubuntu-18.04
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-java@v2
+        with:
+          java-version: 8
+          distribution: adopt-hotspot
+          architecture: x64
+          cache: gradle
+
+      - name: Gradle Publish
+        run: |
+          chmod +x ./gradlew
+          ./gradlew publish --scan
