@@ -90,7 +90,7 @@ allprojects {
             val REPO = System.getenv("GITHUB_REPOSITORY")
             println(GITHUB_ACTOR)
             println(REPO)
-            GITHUB_ACTOR?.run {
+            GITHUB_TOKEN?.run {
                 println("runn")
                 repositories {
                     maven {
