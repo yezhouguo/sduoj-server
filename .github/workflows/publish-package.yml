@@ -21,6 +21,8 @@ jobs:
           cache: gradle
 
       - name: Gradle Publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chmod +x ./gradlew
           ./gradlew publish --scan
