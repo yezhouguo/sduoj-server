@@ -41,6 +41,8 @@ import javax.validation.constraints.Email;
 import javax.validation.constraints.NotNull;
 import java.util.*;
 
+import static cn.edu.sdu.qd.oj.common.enums.ApiExceptionEnum.PASSWORD_NOT_MATCHING;
+
 /**
  * @ClassName UserController
  * @Description TODO
@@ -169,6 +171,30 @@ public class UserController {
             return this.userService.isExistEmail(email);
         }
         return false;
+    }
+
+    //yzg
+    @PostMapping("/loginFromVscode")
+    @ResponseBody
+    public ResponseResult<UserSessionDTO> login(HttpServletResponse response,@RequestBody @NotNull Map<String, String> json) throws ApiException {
+        String username = null, password = null;
+        try {
+            username = json.get("username");
+            password = json.get("password");
+        } catch (Exception ignore) {
+        }
+        log.info("{} login from {} by {}", username, " ", " ");
+        UserSessionDTO userSessionDTO =null;
+        try {
+            if (StringUtils.isNotBlank(username) && StringUtils.isNotBlank(password)) {
+                // 登录校验
+                userSessionDTO = this.userService.login(username, password, " ", " ");
+                response.setHeader(UserSessionDTO.HEADER_KEY, JSON.toJSONString(userSessionDTO));
+            }
+        }catch (Exception loginError) {
+            return ResponseResult.error(PASSWORD_NOT_MATCHING);
+        }
+        return ResponseResult.ok(userSessionDTO);
     }
 
     @PostMapping("/login")

@@ -112,8 +112,8 @@ public class ProblemManageService {
         problem.setProblemCode(null);
         ProblemDO problemDO = problemManageConverter.from(problem);
         AssertUtils.isTrue(problemDao.save(problemDO), ApiExceptionEnum.UNKNOWN_ERROR);
-        // TODO: 魔法值解决
-        problemDO.setProblemCode("SDUOJ-" + problemDO.getProblemId());
+        // TODO: Code中可能会添加其他信息
+        problemDO.setProblemCode(problemDO.getProblemId().toString());
         if (!problemDao.lambdaUpdate()
                 .eq(ProblemDO::getProblemId, problemDO.getProblemId())
                 .set(ProblemDO::getProblemCode, problemDO.getProblemCode())

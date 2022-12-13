@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Nullable;
 import javax.validation.Valid;
+import java.util.List;
 
 @Controller
 @RequestMapping("/problem")
@@ -42,10 +43,25 @@ public class ProblemController {
         return this.problemService.queryByCode(problemCode, descriptionId, userSessionDTO);
     }
 
+    @GetMapping("/queryById")
+    @ApiResponseBody
+    public ProblemDTO queryById(@RequestParam("problemId") String problemId,
+                                  @RequestParam("descriptionId") @Nullable Long descriptionId,
+                                  @UserSession(nullable = true) UserSessionDTO userSessionDTO) {
+        return this.problemService.queryById(problemId, descriptionId, userSessionDTO);
+    }
+
     @GetMapping("/list")
     @ApiResponseBody
     public PageResult<ProblemListDTO> queryList(@Valid ProblemListReqDTO problemListReqDTO,
                                                 @UserSession(nullable = true) UserSessionDTO userSessionDTO) {
         return this.problemService.queryProblemByPage(problemListReqDTO, userSessionDTO);
+    }
+
+    //yzg
+    @GetMapping("/getAllFromVscode")
+    @ApiResponseBody
+    public List<ProblemListDTO> queryAll(@UserSession(nullable = true) UserSessionDTO userSessionDTO) {
+        return this.problemService.queryAllProblem(userSessionDTO);
     }
 }

@@ -148,6 +148,75 @@ public class ProblemService {
         return problemDTO;
     }
 
+    public ProblemDTO queryById(String problemId, Long descriptionId, UserSessionDTO userSessionDTO) {
+        // TODO: cache, polish
+
+        Long userId = Optional.ofNullable(userSessionDTO).map(UserSessionDTO::getUserId).orElse(null);
+
+        ProblemDO problemDO = problemDao.lambdaQuery().select(
+                ProblemDO.class, field -> !field.getColumn().equals(ProblemDOField.CHECKPOINTS)
+        ).eq(ProblemDO::getProblemId, problemId).one();
+        AssertUtils.notNull(problemDO, ApiExceptionEnum.PROBLEM_NOT_FOUND);
+
+        // 非公开题只能出题者和超管查询
+        AssertUtils.isTrue(problemDO.getIsPublic() == 1 || problemDO.getUserId().equals(userId) || PermissionEnum.SUPERADMIN.in(userSessionDTO), ApiExceptionEnum.USER_NOT_MATCHING);
+
+        // 查询题目描述
+        ProblemDescriptionDO problemDescriptionDO = problemDescriptionDao.lambdaQuery()
+                .eq(ProblemDescriptionDO::getProblemId, problemDO.getProblemId())
+                .eq(ProblemDescriptionDO::getId, descriptionId != null ? descriptionId : problemDO.getDefaultDescriptionId())
+                .one();
+        // 若非 superadmin 则进行过滤，过滤掉非公开且非默认且非自己的题面
+        if (problemDescriptionDO != null &&
+                problemDescriptionDO.getIsPublic() == 0 &&
+                !problemDescriptionDO.getId().equals(problemDO.getDefaultDescriptionId()) &&
+                !problemDescriptionDO.getUserId().equals(userId) &&
+                PermissionEnum.SUPERADMIN.notIn(userSessionDTO)) {
+            problemDescriptionDO = null;
+        }
+
+        // 查询所有公开的题面 list
+        LambdaQueryChainWrapper<ProblemDescriptionDO> descriptionListQuery = problemDescriptionDao.lambdaQuery().select(
+                ProblemDescriptionDO::getIsPublic,
+                ProblemDescriptionDO::getId,
+                ProblemDescriptionDO::getProblemId,
+                ProblemDescriptionDO::getUserId,
+                ProblemDescriptionDO::getVoteNum,
+                ProblemDescriptionDO::getTitle
+        ).eq(ProblemDescriptionDO::getProblemId, problemDO.getProblemId());
+        // 查询，若非 superadmin 则进行过滤，过滤掉非公开非自己非默认的题面，并按照 descriptionId 排序
+        List<ProblemDescriptionDO> problemDescriptionDOList = descriptionListQuery.list();
+        problemDescriptionDOList.sort(ProblemDescriptionDO::compareById);
+        if (PermissionEnum.SUPERADMIN.notIn(userSessionDTO)) {
+            problemDescriptionDOList = problemDescriptionDOList.stream()
+                    .filter(o -> o.getIsPublic() == 1 || (o.getIsPublic() == 0 && o.getUserId().equals(userId)) || o.getId().equals(problemDO.getDefaultDescriptionId()))
+                    .collect(Collectors.toList());
+        }
+
+        // 查询 problemCase
+        List<ProblemCaseDTO> problemCaseDTOList = problemExtensionSerivce.queryProblemCase(problemDO.getProblemId());
+
+        ProblemDTO problemDTO = problemConverter.to(problemDO, problemDescriptionDO, problemDescriptionDOList, problemCaseDTOList);
+
+        // TODO: 考虑设计一个 annotation 和 cacheUtil 关联起来，自动填充一些业务字段
+        try {
+            problemDTO.getProblemDescriptionDTO().setProblemId(Long.parseLong(problemId));
+            problemDTO.getProblemDescriptionListDTOList().forEach(o -> {
+                o.setProblemId(Long.parseLong(problemId));
+                o.setUsername(userClient.userIdToUsername(o.getUserId()));
+            });
+        } catch (Exception ignore) {
+        }
+
+        // 置 tagDTO
+        List<Long> tags = getTagIdListFromFeatureMap(problemDTO.getFeatures());
+        if (!CollectionUtils.isEmpty(tags)) {
+            List<TagDO> tagDOList = tagDao.lambdaQuery().in(TagDO::getId, tags).list();
+            problemDTO.setTagDTOList(tagConverter.to(tagDOList));
+        }
+        return problemDTO;
+    }
+
     public PageResult<ProblemListDTO> queryProblemByPage(ProblemListReqDTO reqDTO, UserSessionDTO userSessionDTO) {
         LambdaQueryChainWrapper<ProblemDO> query = problemDao.lambdaQuery().select(
                 ProblemDO::getProblemId,
@@ -193,6 +262,41 @@ public class ProblemService {
                 problemCommonService.getTagIdListByFeatureMap(o.getFeatures()).stream().map(tagIdToDTOMap::get).collect(Collectors.toList())
         ));
         return new PageResult<>(pageResult.getPages(), Optional.ofNullable(problemListDTOList).orElse(Lists.newArrayList()));
+    }
+    //yzg
+    public List<ProblemListDTO> queryAllProblem(UserSessionDTO userSessionDTO) {
+        LambdaQueryChainWrapper<ProblemDO> query = problemDao.lambdaQuery().select(
+                ProblemDO::getProblemId,
+                ProblemDO::getIsPublic,
+                ProblemDO::getFeatures,
+                ProblemDO::getProblemCode,
+                ProblemDO::getProblemTitle,
+                ProblemDO::getSource,
+                ProblemDO::getRemoteOj,
+                ProblemDO::getRemoteUrl,
+                ProblemDO::getSubmitNum,
+                ProblemDO::getAcceptNum
+        );
+        if (PermissionEnum.SUPERADMIN.notIn(userSessionDTO)) {
+            if (userSessionDTO != null) {
+                query.and(o1 -> o1.eq(ProblemDO::getIsPublic, 1)
+                        .or(o2 -> o2.eq(ProblemDO::getIsPublic, 0)
+                                .and(o3 -> o3.eq(ProblemDO::getUserId, userSessionDTO.getUserId()))));
+            } else {
+                query.eq(ProblemDO::getIsPublic, 1);
+            }
+        }
+        // 分页查结果
+        Page<ProblemDO> pageResult = query.page(new Page<>(1, 99999));
+        // 转换
+        List<ProblemListDTO> problemListDTOList = problemListConverter.to(pageResult.getRecords());
+        // 查询 tagDTOMap
+        Map<Long, TagDTO> tagIdToDTOMap = problemCommonService.getTagDTOMapByProblemDOList(pageResult.getRecords());
+        // 置入 tagDTOList
+        problemListDTOList.forEach(o -> o.setTagDTOList(
+                problemCommonService.getTagIdListByFeatureMap(o.getFeatures()).stream().map(tagIdToDTOMap::get).collect(Collectors.toList())
+        ));
+        return problemListDTOList;
     }
 
     private List<TagDO> getTagDTOListFromFeatures(String features) {

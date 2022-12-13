@@ -3,7 +3,7 @@ sduoj:
     port: 19011
     application-name: contest-service
     active: dev
-    nacos-addr: nacos.oj.cs.sdu.edu.cn:8848
+    nacos-addr: 10.0.0.17:8848
 
 server:
   port: ${sduoj.config.port}
